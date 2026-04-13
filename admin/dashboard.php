@@ -1,7 +1,6 @@
 <?php
 require_once '../includes/db.php';
 require_once 'includes/admin_auth.php';
-requireAdminLogin();
 
 // ── Stats ──────────────────────────────────────────────────────────────
 $total_revenue    = (float)(mysqli_fetch_assoc(mysqli_query($conn,
