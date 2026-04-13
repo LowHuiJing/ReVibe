@@ -17,66 +17,52 @@ $seller_id = (int)$_SESSION['user_id'];
 // ── Handle status update ──────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_return'])) {
     $rid        = (int)$_POST['return_id'];
-    $new_status = mysqli_real_escape_string($conn, $_POST['new_status']);
-    $notes      = mysqli_real_escape_string($conn, trim($_POST['admin_notes'] ?? ''));
-    $valid = ['pending','reviewing','approved','rejected','completed'];
-    if (in_array($new_status, $valid)) {
-        $rid   = (int)$_POST['return_id'];
-        $notes = trim($_POST['admin_notes'] ?? '');
+    $new_status = trim($_POST['new_status'] ?? '');
+    $notes      = trim($_POST['admin_notes'] ?? '');
 
-        $new_status = $_POST['new_status'] ?? '';
-        $valid = ['approved','rejected']; // seller only needs approve/reject
-        if (!in_array($new_status, $valid, true)) {
-        header('Location: seller_returns.php'); exit;
-        }
-
+    // Sellers may only approve or reject
+    $allowed = ['approved', 'rejected'];
+    if (in_array($new_status, $allowed, true) && $rid > 0) {
         $stmt = mysqli_prepare($conn,
-        "UPDATE return_requests rr
-        JOIN order_items oi ON oi.id = rr.order_item_id
-        JOIN products p ON p.id = oi.product_id
-        SET rr.status = ?, rr.admin_notes = ?
-        WHERE rr.id = ? AND p.seller_id = ?"
+            "UPDATE return_requests rr
+             JOIN order_items oi ON oi.id = rr.order_item_id
+             JOIN products p ON p.id = oi.product_id
+             SET rr.status = ?, rr.admin_notes = ?
+             WHERE rr.id = ? AND p.seller_id = ?"
         );
         mysqli_stmt_bind_param($stmt, 'ssii', $new_status, $notes, $rid, $seller_id);
         mysqli_stmt_execute($stmt);
-        $ok = (mysqli_stmt_affected_rows($stmt) === 1);
         mysqli_stmt_close($stmt);
 
-        header('Location: seller_returns.php');
-        exit;
-
-
-        // Notify buyer and seller
+        // Fetch order + buyer info for status update & notification
         require_once 'includes/notify.php';
         $rrow = mysqli_fetch_assoc(mysqli_query($conn,
-            "SELECT o.user_id AS buyer_id, p.seller_id, oi.product_name
+            "SELECT o.id AS order_id, o.user_id AS buyer_id, oi.product_name
              FROM return_requests rr
              JOIN orders o ON o.id = rr.order_id
              LEFT JOIN order_items oi ON oi.id = rr.order_item_id
-             LEFT JOIN products p ON p.id = oi.product_id
              WHERE rr.id = $rid LIMIT 1"
         ));
-        if ($rrow) {
+
+        // Update order status when return is approved
+        if ($rrow && $new_status === 'approved') {
+            mysqli_query($conn,
+                "UPDATE orders SET status = 'refunded' WHERE id = " . (int)$rrow['order_id']
+            );
+        }
+
+        // Notify buyer
+        if ($rrow && $rrow['buyer_id']) {
             $label = ucfirst($new_status);
             $pname = $rrow['product_name'] ?? 'your item';
-            // Notify buyer
-            if ($rrow['buyer_id']) {
-                sendNotification($conn, $rrow['buyer_id'], 'order',
-                    'Return Request ' . $label,
-                    'Your return request for "' . $pname . '" has been ' . strtolower($label) . '.' . ($notes ? ' Note: ' . $notes : ''),
-                    '/revibe/order_status.php'
-                );
-            }
-            // Notify seller too if approved/rejected
-            if ($rrow['seller_id'] && in_array($new_status, ['approved','rejected','completed'])) {
-                sendNotification($conn, $rrow['seller_id'], 'order',
-                    'Return Request ' . $label . ' by Admin',
-                    'Admin has ' . strtolower($label) . ' the return request for "' . $pname . '".',
-                    '/revibe/product_management.php'
-                );
-            }
+            sendNotification($conn, $rrow['buyer_id'], 'order',
+                'Return Request ' . $label,
+                'Your return request for "' . $pname . '" has been ' . strtolower($label) . '.' . ($notes ? ' Note: ' . $notes : ''),
+                '/revibe/order_status.php'
+            );
         }
     }
+
     header('Location: seller_returns.php'); exit;
 }
 
@@ -303,17 +289,16 @@ function statusBadge($s) {
             <td style="color:#888;font-size:.75rem;white-space:nowrap;"><?= date('d M Y', strtotime($r['created_at'])) ?></td>
             <td>
                 <button class="action-btn review-btn"
-                    onclick="openModal(
-                        <?= $r['id'] ?>,
-                        '<?= addslashes($product) ?>',
-                        '<?= addslashes($buyer_name) ?>',
-                        '<?= addslashes($seller_name) ?>',
-                        '<?= addslashes($reason) ?>',
-                        '<?= addslashes($refund) ?>',
-                        '<?= $r['status'] ?>',
-                        '<?= addslashes($details_esc) ?>',
-                        '<?= addslashes($notes_esc) ?>'
-                    )">Review</button>
+                    data-id="<?= $r['id'] ?>"
+                    data-product="<?= htmlspecialchars($product, ENT_QUOTES) ?>"
+                    data-buyer="<?= htmlspecialchars($buyer_name, ENT_QUOTES) ?>"
+                    data-seller="<?= htmlspecialchars($seller_name, ENT_QUOTES) ?>"
+                    data-reason="<?= htmlspecialchars($reason, ENT_QUOTES) ?>"
+                    data-refund="<?= htmlspecialchars($refund, ENT_QUOTES) ?>"
+                    data-status="<?= htmlspecialchars($r['status'], ENT_QUOTES) ?>"
+                    data-details="<?= htmlspecialchars($r['details'] ?? '', ENT_QUOTES) ?>"
+                    data-notes="<?= htmlspecialchars($r['admin_notes'] ?? '', ENT_QUOTES) ?>"
+                    onclick="openModal(this)">Review</button>
             </td>
         </tr>
         <?php endwhile; ?>
@@ -355,11 +340,8 @@ function statusBadge($s) {
                 <div style="margin-bottom:.9rem;">
                     <label style="display:block;font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#444;margin-bottom:.35rem;">Update Status</label>
                     <select name="new_status" id="m-status-select">
-                        <option value="pending">Pending</option>
-                        <option value="reviewing">Reviewing</option>
-                        <option value="approved">Approved</option>
-                        <option value="rejected">Rejected</option>
-                        <option value="completed">Completed</option>
+                        <option value="approved">✅ Approved</option>
+                        <option value="rejected">❌ Rejected</option>
                     </select>
                 </div>
                 <div style="margin-bottom:.5rem;">
@@ -373,17 +355,18 @@ function statusBadge($s) {
 </div>
 
 <script>
-function openModal(id, product, buyer, seller, reason, refund, status, details, notes) {
-    document.getElementById('m-id').textContent      = '#' + id;
-    document.getElementById('m-return-id').value     = id;
-    document.getElementById('m-product').textContent = product;
-    document.getElementById('m-buyer').textContent   = '🛍 ' + buyer;
-    document.getElementById('m-seller').textContent  = '🏷 ' + seller;
-    document.getElementById('m-reason').textContent  = reason;
-    document.getElementById('m-refund').textContent  = refund;
-    document.getElementById('m-details').textContent = details || '—';
-    document.getElementById('m-notes').value         = notes;
-    document.getElementById('m-status-select').value = status;
+function openModal(btn) {
+    const d = btn.dataset;
+    document.getElementById('m-id').textContent      = '#' + d.id;
+    document.getElementById('m-return-id').value     = d.id;
+    document.getElementById('m-product').textContent = d.product;
+    document.getElementById('m-buyer').textContent   = '🛍 ' + d.buyer;
+    document.getElementById('m-seller').textContent  = '🏷 ' + d.seller;
+    document.getElementById('m-reason').textContent  = d.reason;
+    document.getElementById('m-refund').textContent  = d.refund;
+    document.getElementById('m-details').textContent = d.details || '—';
+    document.getElementById('m-notes').value         = d.notes;
+    document.getElementById('m-status-select').value = d.status in {'approved':1,'rejected':1} ? d.status : 'approved';
     document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal() {

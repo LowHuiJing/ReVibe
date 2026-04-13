@@ -537,7 +537,7 @@ INSERT INTO `users` (`id`, `username`, `email`, `password_hash`, `role`, `is_act
 (6, 'Hafiz', 'hafiz@mail.com', 'dummy', 'user', 1, '2026-04-11 13:45:31', '2026-04-11 13:45:31'),
 (7, 'Priya', 'priya@mail.com', 'dummy', 'user', 1, '2026-04-11 13:45:31', '2026-04-11 13:45:31'),
 (8, 'Wei Lun', 'weilun@mail.com', 'dummy', 'user', 1, '2026-04-11 13:45:31', '2026-04-11 13:45:31'),
-(9, 'Nivi', 'nivi@mail.com', 'dummy', 'user', 1, '2026-04-11 13:45:31', '2026-04-11 13:45:31');
+(9, 'Nivi', 'nivi@mail.com', 'dummy', 'user', 1, '2026-04-11 13:45:31', '2026-04-11 13:45:31'),
 (10, 'admin', 'admin@revibe.com', 'admin123456', 'admin', 1, '2026-04-12 20:36:41', '2026-04-12 20:38:15');
 
 -- --------------------------------------------------------

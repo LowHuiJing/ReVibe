@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root -e \"SHOW COLUMNS FROM revibe.products LIKE 'status';\")"
+      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root -e \"SHOW COLUMNS FROM revibe.products LIKE 'status';\")",
+      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root revibe -e \"UPDATE return_requests SET status='pending', admin_notes=NULL WHERE id=1;\")",
+      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root revibe -e \"SELECT u.id, u.username, u.role FROM users u WHERE u.id = \\(SELECT seller_id FROM products p JOIN order_items oi ON oi.product_id = p.id JOIN return_requests rr ON rr.order_item_id = oi.id WHERE rr.id = 1\\);\")",
+      "Read(//Applications/XAMPP/xamppfiles/logs/**)",
+      "Bash(/Applications/XAMPP/xamppfiles/bin/php -r \"echo PHP_VERSION;\")",
+      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root revibe -e ':*)"
     ]
   }
 }
