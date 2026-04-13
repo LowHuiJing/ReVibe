@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Applications/XAMPP/xamppfiles/bin/mysql -u root -e \"SHOW COLUMNS FROM revibe.products LIKE 'status';\")"
+    ]
+  }
+}
